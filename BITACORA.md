@@ -1,37 +1,67 @@
-# Plantilla de bitácora de desarrollo asistido
+# Bitácora de desarrollo asistido
 
-> Extensión sugerida: 1–2 páginas. Redacta con tus propias palabras.
+> Redactada con mis propias palabras, a partir de las bitácoras de la Tarea 1.2 y la Tarea 2.1.
 
 ## 1. Comprensión inicial
-- ¿Qué problema resuelve el proyecto?
-- ¿Qué datos utiliza?
-- ¿Cuál es la variable objetivo?
-- ¿Qué modelo utiliza actualmente?
-- ¿Qué falta por completar?
+- **¿Qué problema resuelve el proyecto?** El proyecto busca predecir si un paciente tiene una enfermedad cardíaca dadas ciertas variables clínicas.
+- **¿Qué datos utiliza?** Un archivo `datos.csv` con variables como `age`, `sex`, `cp`, `trestbps`, `chol`, `fbs`, `restecg`, `thalach`, `exang`, `oldpeak`, `slope`, `ca`, `thal`.
+- **¿Cuál es la variable objetivo?** `target` (0 = no tiene la condición, 1 = sí la tiene).
+- **¿Qué modelo utiliza actualmente?** Al inicio, una regresión logística deliberadamente limitada, usando solo 4 de las 10 variables disponibles (`age`, `trestbps`, `chol`, `thalach`).
+- **¿Qué falta por completar?** Ampliar el modelo a las 10 variables aprobadas por el README, con preprocesamiento diferenciado numérico/categórico y balanceo de clases.
 
 ## 2. Ejecución inicial (ANTES)
-- Comando utilizado:
-- Resultado obtenido:
-- Métricas o salida:
-- Errores, advertencias o limitaciones observadas:
+- **Comando utilizado:** `python main.py`
+- **Resultado obtenido:** Al principio me dio un error porque faltaba pandas instalado en el sistema de VS Code. Una vez instalado, corrió bien sin problema.
+- **Métricas o salida:**
+  ```
+  === ANTES (punto de partida) ===
+  Variables usadas: 4
+  Accuracy: 0.7063
+  Precision: 0.7027
+  Recall: 0.6239
+  F1: 0.6609
+  Matriz de confusión:
+  [[735 212]
+   [302 501]]
+  ```
+- **Errores, advertencias o limitaciones observadas:** Un accuracy de aprox. 70% suena bien, pero el README dice que hay problemas: no se estaban usando todas las variables de un paciente, así que no me debía confiar de ese resultado.
 
 ## 3. Interacción con Claude Code
-Para cada paso importante documenta:
-- Qué intentabas lograr.
-- La instrucción que diste a Claude Code.
-- El plan que Claude propuso.
-- Qué corregiste o autorizaste.
-- Qué decisiones tomó Claude por su cuenta.
+Para hacer las mejoras del README, le pedí a Claude Code que las implementara primero de forma normal y que después hiciéramos modificaciones manuales si veía algo raro. El prompt que le di fue: **"Implementa las mejoras sugeridas"**.
+
+- **Mejora del modelo (ANTES → DESPUÉS):** Claude propuso un plan que cumplía exactamente lo pedido: mantener `train_test_split` con `test_size=0.25` y `random_state=42`, construir un `ColumnTransformer` (numérica: `SimpleImputer(median)` + `StandardScaler`; categórica: `SimpleImputer(most_frequent)` + `OneHotEncoder`), usar `LogisticRegression(class_weight="balanced")`, reportar accuracy/precision/recall/F1 para `target=1`, y comparar ANTES vs DESPUÉS con el mismo split. Revisé el plan y lo autoricé; Claude hizo todos los cambios como se pidió y me dejó la plantilla de esta bitácora para que la completara yo.
+
+- **Prueba de fuga de datos:** Ya con las restricciones de prohibir el uso de columnas no requeridas y un chequeo de si se usaron datos prohibidos, corrí el `.py` y los resultados confirmaron que no se usaba ningún dato prohibido del `.csv`, así que no hubo fuga. También le pedí correr un ejemplo de fuga a propósito con la columna `target` — que es una fuga muy importante porque le da la respuesta al programa. Si esa columna se filtra, todas las métricas salen en 100%, lo cual, aunque suene bien, crea un sesgo enorme: si se usara el modelo con clientes nuevos que no vinieron con esa respuesta ya dada, aumentarían mucho los falsos positivos y negativos.
+
+- **Reglas de Contexto 1 y 2 (aviso de que los resultados son sugerencia/predicción, no diagnóstico, y reporte de datos faltantes):** Corrió tal como esperaba — no arregla los valores faltantes sin autorización, solo los menciona, y muestra claramente el aviso sobre los resultados.
+
+- **Reglas de Contexto 3 y 4 (priorizar eliminar falsos negativos, no modificar el `.csv` sin autorización, y esconder sexo/edad si aparecen públicamente):** El programa ahora, en las comparaciones, resalta la mejora en lo más importante: que hayan menos falsos negativos. Como el programa ya de por sí no publicaba datos individuales, le pedí crear una prueba que violara el contexto a propósito para ver cómo respondía. En esa prueba, el programa falló en esconder los datos de sexo y edad — los publicó sin problema. Claude no me dio automáticamente una salvaguarda para evitarlo; eso era algo que yo tenía que especificar en el contexto.
+
+- **Revisión y arreglos:** Le añadí al Contexto.md que si se ve la edad y el sexo públicamente, el programa no debe mostrar los resultados, debe parar el script, y enviar un mensaje de error de "información sensible en riesgo". Claude modificó el `.py` de prueba para probarlo y funcionó bien. Algo interesante fue que, sin que yo se lo pidiera, Claude también añadió las columnas sensibles y el mismo protocolo de protección al `main.py` real, aunque en el código actual es imposible que ocurra esa fuga — dijo que lo dejaba puesto por si acaso, para no correr el riesgo en el futuro.
 
 ## 4. Verificación
-- ¿Qué ejecutaste para comprobar los cambios?
-- ¿Qué inspeccionaste en el código o en los datos?
-- ¿Qué evidencia demuestra que funciona?
+- Ejecuté `python main.py` después de cada cambio para confirmar que las métricas del ANTES se mantuvieran exactamente iguales (0.7063 de accuracy), lo cual confirmaba que el split de datos seguía bien alineado entre ambos modelos.
+- Inspeccioné la salida de consola en cada paso: el reporte de valores faltantes, el aviso de que los resultados son solo predicciones, la verificación de fuga de datos, y el veredicto basado en recall.
+- Corrí pruebas deliberadas de violación de las reglas (`test_violacion.py`): una usando una columna prohibida (`ca`), otra forzando que el recall empeorara, y otra intentando mostrar edad/sexo. Las tres dieron la respuesta esperada — advertencia de fuga, alerta de que el recall no mejoró, y finalmente el script deteniéndose con el error de "información sensible en riesgo".
+- La evidencia de que funciona: los resultados del ANTES coinciden exactamente con la ejecución original de la Tarea 1.2, y las advertencias/errores solo aparecen cuando efectivamente se viola una regla, nunca antes.
 
 ## 5. Resultado (DESPUÉS)
-- Métricas o salida final:
-- Comparación con el punto de partida:
-- ¿Qué mejoró y por qué?
+- **Métricas o salida final:**
+  ```
+  === DESPUÉS (mejora equilibrada) ===
+  Variables usadas: 10
+  Accuracy: 0.8309
+  Precision: 0.8229
+  Recall: 0.8045
+  F1: 0.8136
+  Matriz de confusión:
+  [[808 139]
+   [157 646]]
+  ```
+- **Comparación con el punto de partida:** Los falsos negativos bajaron de 302 a 157, y las cuatro métricas subieron respecto al ANTES (accuracy 0.7063 → 0.8309, precision 0.7027 → 0.8229, recall 0.6239 → 0.8045, F1 0.6609 → 0.8136).
+- **¿Qué mejoró y por qué?** Mejoró porque ahora se usan las 10 variables aprobadas en vez de solo 4, las variables categóricas se manejan correctamente (one-hot encoding en vez de tratarlas como números), las numéricas se escalan, y se usa `class_weight="balanced"` para que el modelo no ignore la clase minoritaria. Eso es justo lo que bajó los falsos negativos, que es el criterio que más importa en este proyecto: no detectar una condición real es más grave que una falsa alarma.
 
 ## 6. Explicación propia
-Explica con tus palabras qué hace el código incorporado y por qué resuelve la mejora solicitada.
+El código del programa primero importa las herramientas necesarias para hacer su trabajo. Luego busca en el repositorio la data (`datos.csv`). Con esa data empieza a crear las variables predictoras y arma los conjuntos de prueba y entrenamiento con un split de 0.25 y un `random_state` de 42; esto asegura que el split siempre sea el mismo y que la comparación entre modelos sea justa. El programa hace dos entrenamientos y pruebas: uno como estaba originalmente, sin las mejoras, y otro con las mejoras, para poder comparar los resultados al final. En los datos faltantes le añade el valor más común (o la mediana, según el tipo de variable), y en categorías nuevas que nunca vio, las ignora, poniéndole cero a esos valores como parte de las mejoras. Al final crea un reporte comparando ambas versiones.
+
+Además, después de aplicarle el contexto del proyecto, el programa también: avisa que sus resultados son una predicción/sugerencia estadística y no un diagnóstico definitivo; reporta cuántos valores faltantes hay antes de imputarlos; verifica que no se usen columnas prohibidas como predictor (fuga de datos) y corre un ejemplo a propósito usando `target` como predictor, que muestra cómo las métricas se inflan artificialmente a 100% — evidencia clara de por qué la fuga de datos es peligrosa; prioriza el Recall sobre el accuracy al comparar ANTES y DESPUÉS, porque un falso negativo es más peligroso que un falso positivo en un contexto de salud; y protege la privacidad de la edad y el sexo, deteniendo el script con un mensaje de error si en algún momento se intentaran mostrar públicamente.
