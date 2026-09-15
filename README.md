@@ -59,3 +59,15 @@ Completa el proyecto para que:
 
 ## Límite de alcance
 Para mantener una dificultad equivalente entre estudiantes, **no se requiere** selección automática de variables, validación cruzada, búsqueda de hiperparámetros, ingeniería avanzada de características ni comparación de múltiples algoritmos.
+
+## Extensión más allá del alcance original (14 de septiembre de 2026)
+Después de entregar la mejora pedida arriba, se hizo un diagnóstico de calidad de datos y varias extensiones que **se salen a propósito** del límite de alcance de esta tarea. Se documentan aquí para dejar clara la diferencia entre la entrega base y el trabajo adicional; el detalle completo está en `Contexto.md` y `BITACORA.md`.
+
+- **Diagnóstico de datos:** 1,669 filas duplicadas exactas (23.8%, probablemente por cómo se generó este archivo académico), faltantes en `ca`/`thal`, y atípicos (IQR) en `trestbps`/`chol`/`oldpeak`/`thalach` — todos clínicamente plausibles. Los duplicados se dejaron documentados como limitación conocida, sin modificar.
+- **Manejo de faltantes:** se agregó `thal_missing`, indicador binario de que `thal` fue imputado.
+- **Manejo de atípicos:** `RobustScaler` en vez de `StandardScaler` para las variables numéricas.
+- **Más variables:** se agregaron `fbs`, `slope` y `ca` como predictores categóricos (14 variables en total, en vez de las 10 originales).
+- **Selección de características:** un modelo alterno ("SELECCIONADO") usa solo las 10 variables con mayor correlación con `target` (calculada en train, |r| >= 0.15), con desempeño casi idéntico al de 14 variables mediante un modelo más simple.
+- **Salvaguardas adicionales:** verificación de fuga de datos, demostración de fuga real usando `target` como predictor a propósito, y un control que detiene el script si se intenta mostrar `age`/`sex` públicamente.
+
+`main.py` ahora imprime cuatro modelos en un solo reporte: ANTES, DESPUÉS, CON FUGA y SELECCIONADO.

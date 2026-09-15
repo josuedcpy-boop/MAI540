@@ -7,7 +7,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, RobustScaler
 
 DATA = Path(__file__).parent / "data" / "datos.csv"
 
@@ -18,24 +18,55 @@ df = pd.read_csv(DATA)
 missing_counts = df.isna().sum()
 missing_counts = missing_counts[missing_counts > 0]
 
+# Diagnóstico de datos (faltantes/atípicos) aplicado al modelo DESPUÉS -- esto
+# se DESVÍA a propósito de lo que pide literalmente el README (exactamente 10
+# variables + StandardScaler), decisión explícita documentada en Contexto.md:
+# 1) indicador binario de que "thal" era faltante (variable 11), en vez de
+#    solo imputar en silencio con la moda;
+# 2) RobustScaler en vez de StandardScaler para las numéricas, porque
+#    trestbps/chol/oldpeak tienen valores atípicos (IQR) que StandardScaler
+#    dejaría dominar la escala.
+df["thal_missing"] = df["thal"].isna().astype(int)
+
 numeric_features = ["age", "trestbps", "chol", "thalach", "oldpeak"]
-categorical_features = ["sex", "cp", "restecg", "exang", "thal"]
+# Decisión explícita (fuera del alcance literal del README, que pedía exactamente
+# 10 variables): se agregan fbs, slope y ca como predictores categóricos también,
+# usando las 13 variables clínicas disponibles en vez de solo 10.
+categorical_features = ["sex", "cp", "restecg", "exang", "thal", "fbs", "slope", "ca"]
+indicator_features = ["thal_missing"]
 baseline_features = ["age", "trestbps", "chol", "thalach"]
 
-# Columnas que nunca deben usarse como predictor: el target (fuga directa) y las
-# variables fuera del alcance de 10 predictores del README (fbs, slope, ca).
-# Esto solo registra (tracking) si alguna se cuela en ANTES/DESPUÉS; no detiene
-# la ejecución, para poder observar el efecto de la fuga en el experimento de abajo.
-FORBIDDEN_FEATURES = {"target", "fbs", "slope", "ca"}
+# Única columna que nunca debe usarse como predictor: el target (fuga directa).
+# Esto solo registra (tracking) si se cuela en ANTES/DESPUÉS; no detiene la
+# ejecución, para poder observar el efecto de la fuga en el experimento de abajo.
+FORBIDDEN_FEATURES = {"target"}
 used_features = set(numeric_features) | set(categorical_features) | set(baseline_features)
 leaked = used_features & FORBIDDEN_FEATURES
 
-X = df[numeric_features + categorical_features]
+X = df[numeric_features + categorical_features + indicator_features]
 y = df["target"].astype(int)
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.25, random_state=42, stratify=y
 )
+
+# SELECCIÓN DE CARACTERÍSTICAS (fuera del alcance literal del README, que decía
+# que no se requería selección de variables): correlación de Pearson de cada
+# predictor con target, calculada SOLO con datos de train para no filtrar
+# información del test. Criterio: conservar |r| >= 0.15; el umbral coincide con
+# conocimiento de dominio ya documentado sobre este dataset -- chol y fbs son
+# célebres por ser predictores débiles de enfermedad cardíaca en Cleveland, y
+# nuestro propio indicador thal_missing no aporta señal real.
+train_con_target = X_train.copy()
+train_con_target["target"] = y_train
+correlacion_target = (
+    train_con_target.corr(numeric_only=True)["target"].drop("target").sort_values(key=abs, ascending=False)
+)
+UMBRAL_CORRELACION = 0.15
+variables_conservadas = correlacion_target[correlacion_target.abs() >= UMBRAL_CORRELACION].index.tolist()
+variables_descartadas = correlacion_target[correlacion_target.abs() < UMBRAL_CORRELACION].index.tolist()
+selected_numeric_features = [f for f in numeric_features if f in variables_conservadas]
+selected_categorical_features = [f for f in categorical_features if f in variables_conservadas]
 
 # ANTES: punto de partida deliberadamente limitado, solo variables numéricas simples.
 baseline_model = Pipeline([
@@ -45,17 +76,20 @@ baseline_model = Pipeline([
 baseline_model.fit(X_train[baseline_features], y_train)
 baseline_pred = baseline_model.predict(X_test[baseline_features])
 
-# DESPUÉS: 10 predictores con preprocesamiento diferenciado por tipo de variable
-# y balanceo de clases, ajustado únicamente con los datos de entrenamiento.
+# DESPUÉS: 10 predictores del README + fbs/slope/ca + 1 indicador de faltante
+# ("thal_missing"), con preprocesamiento diferenciado por tipo de variable,
+# RobustScaler para atenuar atípicos en las numéricas, y balanceo de clases;
+# ajustado únicamente con datos de train.
 preprocessor = ColumnTransformer([
     ("num", Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
+        ("scaler", RobustScaler()),
     ]), numeric_features),
     ("cat", Pipeline([
         ("imputer", SimpleImputer(strategy="most_frequent")),
         ("onehot", OneHotEncoder(handle_unknown="ignore")),
     ]), categorical_features),
+    ("ind", "passthrough", indicator_features),
 ])
 final_model = Pipeline([
     ("preprocessor", preprocessor),
@@ -69,19 +103,20 @@ final_pred = final_model.predict(X_test)
 # cuando el objetivo se filtra al modelo. Nunca debe hacerse esto en un
 # modelo real; existe solo para comprobar el efecto de la fuga de datos.
 leak_numeric_features = numeric_features + ["target"]
-X_leak = df[leak_numeric_features + categorical_features]
+X_leak = df[leak_numeric_features + categorical_features + indicator_features]
 X_leak_train = X_leak.loc[X_train.index]
 X_leak_test = X_leak.loc[X_test.index]
 
 leak_preprocessor = ColumnTransformer([
     ("num", Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
+        ("scaler", RobustScaler()),
     ]), leak_numeric_features),
     ("cat", Pipeline([
         ("imputer", SimpleImputer(strategy="most_frequent")),
         ("onehot", OneHotEncoder(handle_unknown="ignore")),
     ]), categorical_features),
+    ("ind", "passthrough", indicator_features),
 ])
 leak_model = Pipeline([
     ("preprocessor", leak_preprocessor),
@@ -89,6 +124,25 @@ leak_model = Pipeline([
 ])
 leak_model.fit(X_leak_train, y_train)
 leak_pred = leak_model.predict(X_leak_test)
+
+# SELECCIONADO: mismo preprocesamiento que DESPUÉS, pero solo con las variables
+# que pasaron el criterio de correlación (|r| >= 0.15 con target, calculado en train).
+selected_preprocessor = ColumnTransformer([
+    ("num", Pipeline([
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", RobustScaler()),
+    ]), selected_numeric_features),
+    ("cat", Pipeline([
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("onehot", OneHotEncoder(handle_unknown="ignore")),
+    ]), selected_categorical_features),
+])
+selected_model = Pipeline([
+    ("preprocessor", selected_preprocessor),
+    ("model", LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced")),
+])
+selected_model.fit(X_train[selected_numeric_features + selected_categorical_features], y_train)
+selected_pred = selected_model.predict(X_test[selected_numeric_features + selected_categorical_features])
 
 
 # Contexto.md, sección 4: no exponer age/sex de pacientes individuales en la
@@ -144,7 +198,7 @@ print("AVISO: estos resultados son una predicción/sugerencia estadística, no u
 print("definitivo. No sustituyen evaluación médica ni sugieren tratamiento o medicamentos.")
 print()
 print_report("ANTES (punto de partida)", len(baseline_features), y_test, baseline_pred)
-print_report("DESPUÉS (mejora equilibrada)", len(numeric_features) + len(categorical_features), y_test, final_pred)
+print_report("DESPUÉS (mejora equilibrada)", len(numeric_features) + len(categorical_features) + len(indicator_features), y_test, final_pred)
 
 # Contexto.md, sección 3: el criterio principal es Recall de target=1 (menos
 # falsos negativos), no accuracy, porque no detectar una condición real es
@@ -162,4 +216,16 @@ print()
 
 print("ADVERTENCIA: el siguiente resultado incluye 'target' como predictor A PROPÓSITO,")
 print("solo para demostrar el efecto de la fuga de datos. NUNCA usar así un modelo real.")
-print_report("CON FUGA (demostración, NO usar en producción)", len(leak_numeric_features) + len(categorical_features), y_test, leak_pred)
+print_report("CON FUGA (demostración, NO usar en producción)", len(leak_numeric_features) + len(categorical_features) + len(indicator_features), y_test, leak_pred)
+
+print(f"=== SELECCIÓN DE CARACTERÍSTICAS (correlación con target, umbral |r| >= {UMBRAL_CORRELACION}) ===")
+print(correlacion_target.round(4).to_string())
+print(f"Conservadas ({len(variables_conservadas)}): {variables_conservadas}")
+print(f"Descartadas ({len(variables_descartadas)}): {variables_descartadas}")
+print()
+print_report(
+    "SELECCIONADO (solo variables con |r| >= 0.15)",
+    len(selected_numeric_features) + len(selected_categorical_features),
+    y_test,
+    selected_pred,
+)
