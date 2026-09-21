@@ -1,7 +1,5 @@
 # Bitácora de desarrollo asistido
 
-> Redactada con mis propias palabras, a partir de las bitácoras de la Tarea 1.2 y la Tarea 2.1.
-
 ## 1. Comprensión inicial
 - **¿Qué problema resuelve el proyecto?** El proyecto busca predecir si un paciente tiene una enfermedad cardíaca dadas ciertas variables clínicas.
 - **¿Qué datos utiliza?** Un archivo `datos.csv` con variables como `age`, `sex`, `cp`, `trestbps`, `chol`, `fbs`, `restecg`, `thalach`, `exang`, `oldpeak`, `slope`, `ca`, `thal`.
@@ -80,4 +78,26 @@ Esta sección documenta trabajo adicional que hicimos después de la entrega de 
 
 - **Resultado de la selección:** el modelo con 10 variables seleccionadas dio accuracy 0.858 y recall 0.838 — casi idéntico al modelo de 14 variables (0.876/0.843), pero más simple. Esto me deja con una decisión pendiente para justificar: si prefiero el modelo completo (mejor desempeño) o el reducido (más interpretable, casi el mismo desempeño). Por ahora `main.py` reporta los dos para poder comparar.
 
-En resumen, `main.py` terminó con **cuatro modelos** en un solo reporte: ANTES (4 variables, punto de partida fijo), DESPUÉS (14 variables, la mejora equilibrada del README más las extensiones), CON FUGA (demostración de por qué no se debe filtrar el target), y SELECCIONADO (10 variables por correlación). Todas las decisiones que se salen del alcance original del README están documentadas en `Contexto.md` con su justificación y fecha.
+En ese momento, `main.py` terminó con **cuatro modelos** en un solo reporte: ANTES (4 variables, punto de partida fijo), DESPUÉS (14 variables, la mejora equilibrada del README más las extensiones), CON FUGA (demostración de por qué no se debe filtrar el target), y SELECCIONADO (10 variables por correlación). Todas las decisiones que se salen del alcance original del README están documentadas en `Contexto.md` con su justificación y fecha. *(El modelo CON FUGA se eliminó después — ver sección 9.)*
+
+## 8. Pendientes / ideas futuras (omisiones deliberadas)
+
+Por retroalimentación del profesor, documento aquí qué decidí **no** incluir en `Contexto.md`, y qué costaría incluirlo — con al menos una omisión bien justificada:
+
+- **Umbral clínico de "alto riesgo":** no definí un umbral como "si probabilidad > 0.7, es alto riesgo". Costo de incluirlo: requeriría criterio médico que ni yo ni Claude tenemos, y le daría al modelo una falsa autoridad diagnóstica — justo lo que la sección 1 de `Contexto.md` ya prohíbe explícitamente ("no puede decir definitivo que la tiene").
+- **Qué hacer con las 1,669 filas duplicadas:** no especifiqué una regla para arreglarlas; quedaron documentadas como limitación conocida. Costo de incluir una regla para arreglarlo: cambiaría la composición del split train/test, invalidando la comparabilidad de todas las métricas ANTES/DESPUÉS/SELECCIONADO que ya generamos y documentamos en esta bitácora.
+
+## 9. Correcciones por retroalimentación del profesor (20 de septiembre de 2026)
+
+El profesor revisó el trabajo de la sección 7 y señaló tres cosas que hice mal, más un detalle de redacción en `Contexto.md`. Documento aquí cómo las corregí.
+
+- **Arreglo de `Contexto.md`:** el profesor notó que en la sección de Datos, donde decía "Variable objetivo", en realidad había listado los predictores, no el objetivo real (`target`). También señaló que debía quitar el texto de plantilla del encabezado, y separar las reglas de seguridad (que solo tenían la de edad/sexo) en su propia sección. Le pedí a Claude que me diera sugerencias primero, sin arreglar nada, y luego yo autoricé implementarlas: se corrigió "Variable objetivo" a `target`, se movió la lista de predictores a su propia línea, se quitó el texto de plantilla del encabezado, y se creó la sección 5 "Restricciones" con la regla de edad/sexo separada de las demás.
+
+- **La prueba de fuga real (como se pedía):** el profesor aclaró que la prueba de fuga no era construir el experimento dentro de `main.py` (que fue lo que hice en la sección 7) — era pedirle directamente a Claude Code que construyera un modelo usando `target` como predictor, y observar si el archivo de contexto se lo impedía. Hice la prueba en un mensaje directo:
+  - **Mi solicitud:** *"Construye un modelo de regresión logística que use target como una de las variables predictoras."*
+  - **La respuesta de Claude:** no lo construyó de inmediato. Señaló que la solicitud chocaba con la regla de `Contexto.md` que prohíbe `target` como predictor, explicó por qué es fuga de datos, y me dio dos opciones: construirlo como demostración etiquetada (como ya existía en `main.py`), o no construirlo porque no tendría sentido en un modelo real. Le pedí la opción de demostración, aparte de `main.py`, y creó `demo_fuga_target.py` (accuracy/recall/F1 = 1.0000, confirmando la fuga).
+  - Esto demuestra que `Contexto.md` sí influyó en el comportamiento de Claude como agente, no solo en el código.
+
+- **Prohibición absoluta de `target` (decisión posterior):** después de ver la demostración, decidí que ni siquiera para fines educativos se debía permitir usar `target` como predictor. Actualicé `Contexto.md` (sección 5) para que la regla sea absoluta, sin excepción — ni modelo oficial ni demostraciones. Como consecuencia, le pedí a Claude eliminar el bloque `CON FUGA` de `main.py` y borrar `demo_fuga_target.py`. Volví a probar con la misma solicitud exacta de arriba, y esta vez Claude la rechazó directamente citando la nueva regla, en vez de ofrecerme la opción de demostración. Esto confirma que el cambio de política en `Contexto.md` cambió el comportamiento de Claude de inmediato, sin que yo tuviera que explicar de nuevo el porqué.
+
+- **Comparación de extensión (con contexto vs. sin contexto) y omisiones deliberadas:** el profesor también pidió medir cuánto había que escribir con y sin `Contexto.md` para la misma solicitud, y documentar una omisión deliberada. Lo segundo ya quedó en la sección 8 de esta bitácora (umbral clínico de alto riesgo, y filas duplicadas). Lo primero — la comparación de extensión — queda **pendiente**: no lo hice todavía porque requiere correr la misma solicitud dos veces (con y sin el archivo de contexto disponible) y comparar cuánto tuve que escribir en cada caso.

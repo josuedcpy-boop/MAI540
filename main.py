@@ -37,8 +37,10 @@ indicator_features = ["thal_missing"]
 baseline_features = ["age", "trestbps", "chol", "thalach"]
 
 # Única columna que nunca debe usarse como predictor: el target (fuga directa).
-# Esto solo registra (tracking) si se cuela en ANTES/DESPUÉS; no detiene la
-# ejecución, para poder observar el efecto de la fuga en el experimento de abajo.
+# Prohibición absoluta, sin excepción (Contexto.md, sección 5, 2026-09-20):
+# ni el modelo oficial ni experimentos/demostraciones pueden usar "target"
+# como predictor. Este chequeo solo confirma que ninguno de los modelos de
+# abajo la incluye.
 FORBIDDEN_FEATURES = {"target"}
 used_features = set(numeric_features) | set(categorical_features) | set(baseline_features)
 leaked = used_features & FORBIDDEN_FEATURES
@@ -97,33 +99,6 @@ final_model = Pipeline([
 ])
 final_model.fit(X_train, y_train)
 final_pred = final_model.predict(X_test)
-
-# CON FUGA (demostración a propósito): se agrega "target" como si fuera un
-# predictor más, para medir cuánto se infla artificialmente el desempeño
-# cuando el objetivo se filtra al modelo. Nunca debe hacerse esto en un
-# modelo real; existe solo para comprobar el efecto de la fuga de datos.
-leak_numeric_features = numeric_features + ["target"]
-X_leak = df[leak_numeric_features + categorical_features + indicator_features]
-X_leak_train = X_leak.loc[X_train.index]
-X_leak_test = X_leak.loc[X_test.index]
-
-leak_preprocessor = ColumnTransformer([
-    ("num", Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", RobustScaler()),
-    ]), leak_numeric_features),
-    ("cat", Pipeline([
-        ("imputer", SimpleImputer(strategy="most_frequent")),
-        ("onehot", OneHotEncoder(handle_unknown="ignore")),
-    ]), categorical_features),
-    ("ind", "passthrough", indicator_features),
-])
-leak_model = Pipeline([
-    ("preprocessor", leak_preprocessor),
-    ("model", LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced")),
-])
-leak_model.fit(X_leak_train, y_train)
-leak_pred = leak_model.predict(X_leak_test)
 
 # SELECCIONADO: mismo preprocesamiento que DESPUÉS, pero solo con las variables
 # que pasaron el criterio de correlación (|r| >= 0.15 con target, calculado en train).
@@ -213,10 +188,6 @@ if recall_despues > recall_antes:
 else:
     print(f"Alerta: el recall no mejoró (cambio de {recall_despues - recall_antes:+.4f}); revisar el modelo.")
 print()
-
-print("ADVERTENCIA: el siguiente resultado incluye 'target' como predictor A PROPÓSITO,")
-print("solo para demostrar el efecto de la fuga de datos. NUNCA usar así un modelo real.")
-print_report("CON FUGA (demostración, NO usar en producción)", len(leak_numeric_features) + len(categorical_features) + len(indicator_features), y_test, leak_pred)
 
 print(f"=== SELECCIÓN DE CARACTERÍSTICAS (correlación con target, umbral |r| >= {UMBRAL_CORRELACION}) ===")
 print(correlacion_target.round(4).to_string())
