@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
@@ -13,6 +14,15 @@ DATA = Path(__file__).parent / "data" / "datos.csv"
 
 df = pd.read_csv(DATA)
 
+# Corrección (2026-09-20, retroalimentación del profesor): quitar duplicados
+# ANTES de dividir train/test. Si se hiciera después, copias exactas de un
+# mismo paciente ya habrían quedado repartidas entre ambos conjuntos, y el
+# modelo podría "memorizar" en train una fila casi idéntica a una del test.
+filas_antes_dedup = len(df)
+df = df.drop_duplicates().reset_index(drop=True)
+filas_despues_dedup = len(df)
+filas_duplicadas_eliminadas = filas_antes_dedup - filas_despues_dedup
+
 # Contexto.md, sección 2 (Datos): reportar valores faltantes antes de que el
 # pipeline los impute, para que quede visible qué se está "arreglando".
 missing_counts = df.isna().sum()
@@ -23,10 +33,39 @@ missing_counts = missing_counts[missing_counts > 0]
 # variables + StandardScaler), decisión explícita documentada en Contexto.md:
 # 1) indicador binario de que "thal" era faltante (variable 11), en vez de
 #    solo imputar en silencio con la moda;
-# 2) RobustScaler en vez de StandardScaler para las numéricas, porque
-#    trestbps/chol/oldpeak tienen valores atípicos (IQR) que StandardScaler
-#    dejaría dominar la escala.
+# 2) RobustScaler en vez de StandardScaler para las numéricas;
+# 3) recorte (winsorizing) de atípicos a los límites del IQR antes de escalar
+#    (retroalimentación del profesor, 2026-09-20): RobustScaler por sí solo
+#    no "trata" los atípicos, solo evita que dominen la escala -- los valores
+#    seguían intactos. Evidencia (BITACORA.md sección 11): recortar da
+#    accuracy igual (0.8800) y recall +0.0031 frente a no recortar, así que
+#    se adopta el recorte.
 df["thal_missing"] = df["thal"].isna().astype(int)
+
+
+class RecorteIQR(BaseEstimator, TransformerMixin):
+    """Recorta (winsoriza) cada columna a [Q1 - k*IQR, Q3 + k*IQR].
+
+    Los límites se calculan únicamente en fit() (datos de train), nunca con
+    datos de test, para no filtrar información del conjunto de prueba.
+    """
+
+    def __init__(self, k=1.5):
+        self.k = k
+
+    def fit(self, X, y=None):
+        X = pd.DataFrame(X)
+        q1, q3 = X.quantile(0.25), X.quantile(0.75)
+        iqr = q3 - q1
+        self.lower_ = (q1 - self.k * iqr).to_numpy()
+        self.upper_ = (q3 + self.k * iqr).to_numpy()
+        return self
+
+    def transform(self, X):
+        X = pd.DataFrame(X).copy()
+        for i, columna in enumerate(X.columns):
+            X[columna] = X[columna].clip(self.lower_[i], self.upper_[i])
+        return X.to_numpy()
 
 numeric_features = ["age", "trestbps", "chol", "thalach", "oldpeak"]
 # Decisión explícita (fuera del alcance literal del README, que pedía exactamente
@@ -85,6 +124,7 @@ baseline_pred = baseline_model.predict(X_test[baseline_features])
 preprocessor = ColumnTransformer([
     ("num", Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
+        ("recorte", RecorteIQR(k=1.5)),
         ("scaler", RobustScaler()),
     ]), numeric_features),
     ("cat", Pipeline([
@@ -105,6 +145,7 @@ final_pred = final_model.predict(X_test)
 selected_preprocessor = ColumnTransformer([
     ("num", Pipeline([
         ("imputer", SimpleImputer(strategy="median")),
+        ("recorte", RecorteIQR(k=1.5)),
         ("scaler", RobustScaler()),
     ]), selected_numeric_features),
     ("cat", Pipeline([
@@ -156,7 +197,9 @@ def print_report(titulo, n_variables, y_true, y_pred):
     print()
 
 
-print(f"Filas: {len(df):,}")
+print(f"Filas antes de quitar duplicados: {filas_antes_dedup:,}")
+print(f"Filas duplicadas eliminadas (antes del split): {filas_duplicadas_eliminadas:,}")
+print(f"Filas después de quitar duplicados: {filas_despues_dedup:,}")
 if len(missing_counts) > 0:
     print("Valores faltantes detectados (se imputan dentro del pipeline, solo con datos de train):")
     for columna, cantidad in missing_counts.items():

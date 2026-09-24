@@ -22,6 +22,7 @@
   [[735 212]
    [302 501]]
   ```
+  *(Nota 2026-09-20: esta es la evidencia histórica de la entrega original de Tarea 1.2, sobre las 7,000 filas sin deduplicar. Ver sección 9 para las métricas corregidas después de eliminar duplicados.)*
 - **Errores, advertencias o limitaciones observadas:** Un accuracy de aprox. 70% suena bien, pero el README dice que hay problemas: no se estaban usando todas las variables de un paciente, así que no me debía confiar de ese resultado.
 
 ## 3. Interacción con Claude Code
@@ -56,6 +57,7 @@ Para hacer las mejoras del README, le pedí a Claude Code que las implementara p
   [[808 139]
    [157 646]]
   ```
+  *(Nota 2026-09-20: también evidencia histórica, previa a la corrección de duplicados. Ver sección 9.)*
 - **Comparación con el punto de partida:** Los falsos negativos bajaron de 302 a 157, y las cuatro métricas subieron respecto al ANTES (accuracy 0.7063 → 0.8309, precision 0.7027 → 0.8229, recall 0.6239 → 0.8045, F1 0.6609 → 0.8136).
 - **¿Qué mejoró y por qué?** Mejoró porque ahora se usan las 10 variables aprobadas en vez de solo 4, las variables categóricas se manejan correctamente (one-hot encoding en vez de tratarlas como números), las numéricas se escalan, y se usa `class_weight="balanced"` para que el modelo no ignore la clase minoritaria. Eso es justo lo que bajó los falsos negativos, que es el criterio que más importa en este proyecto: no detectar una condición real es más grave que una falsa alarma.
 
@@ -76,28 +78,60 @@ Esta sección documenta trabajo adicional que hicimos después de la entrega de 
 
 - **Selección de características:** le pregunté a Claude si aplicar un criterio de selección de variables (justificando con correlación y conocimiento de dominio) ayudaría. Me explicó que iría en sentido contrario a lo que habíamos hecho (que fue agregar variables), pero que podía servir para tener un modelo más simple e interpretable. Se calculó la correlación de Pearson de cada variable con `target`, usando **solo los datos de entrenamiento** para no hacer trampa mirando el test. Con un umbral de |r| >= 0.15 se descartaron `trestbps` (r=0.12), `chol` (r=0.06), `fbs` (r=0.02) y `thal_missing` (r=0.02), y quedaron 10 variables (`thal`, `exang`, `ca`, `cp`, `thalach`, `oldpeak`, `slope`, `sex`, `age`, `restecg`). Me pareció interesante que esto coincide con cosas que se conocen de este dataset específico: `chol` y `fbs` son conocidos por ser predictores clínicamente intuitivos pero estadísticamente débiles en el dataset de Cleveland.
 
-- **Resultado de la selección:** el modelo con 10 variables seleccionadas dio accuracy 0.858 y recall 0.838 — casi idéntico al modelo de 14 variables (0.876/0.843), pero más simple. Esto me deja con una decisión pendiente para justificar: si prefiero el modelo completo (mejor desempeño) o el reducido (más interpretable, casi el mismo desempeño). Por ahora `main.py` reporta los dos para poder comparar.
+- **Resultado de la selección:** el modelo con 10 variables seleccionadas dio accuracy 0.858 y recall 0.838 — casi idéntico al modelo de 14 variables (0.876/0.843), pero más simple. Esto me deja con una decisión pendiente para justificar: si prefiero el modelo completo (mejor desempeño) o el reducido (más interpretable, casi el mismo desempeño). Por ahora `main.py` reporta los dos para poder comparar. *(Nota 2026-09-20: estos números son de antes de la corrección de duplicados — ver sección 9 para los actualizados.)*
 
 En ese momento, `main.py` terminó con **cuatro modelos** en un solo reporte: ANTES (4 variables, punto de partida fijo), DESPUÉS (14 variables, la mejora equilibrada del README más las extensiones), CON FUGA (demostración de por qué no se debe filtrar el target), y SELECCIONADO (10 variables por correlación). Todas las decisiones que se salen del alcance original del README están documentadas en `Contexto.md` con su justificación y fecha. *(El modelo CON FUGA se eliminó después — ver sección 9.)*
 
-## 8. Pendientes / ideas futuras (omisiones deliberadas)
-
-Por retroalimentación del profesor, documento aquí qué decidí **no** incluir en `Contexto.md`, y qué costaría incluirlo — con al menos una omisión bien justificada:
-
+## 8. Pendientes / ideas futuras 
 - **Umbral clínico de "alto riesgo":** no definí un umbral como "si probabilidad > 0.7, es alto riesgo". Costo de incluirlo: requeriría criterio médico que ni yo ni Claude tenemos, y le daría al modelo una falsa autoridad diagnóstica — justo lo que la sección 1 de `Contexto.md` ya prohíbe explícitamente ("no puede decir definitivo que la tiene").
-- **Qué hacer con las 1,669 filas duplicadas:** no especifiqué una regla para arreglarlas; quedaron documentadas como limitación conocida. Costo de incluir una regla para arreglarlo: cambiaría la composición del split train/test, invalidando la comparabilidad de todas las métricas ANTES/DESPUÉS/SELECCIONADO que ya generamos y documentamos en esta bitácora.
+- ~~**Qué hacer con las 1,669 filas duplicadas:** no especifiqué una regla para arreglarlas...~~ **Revertido (2026-09-20):** el profesor pidió corregir esto explícitamente. Ver sección 9.
 
-## 9. Correcciones por retroalimentación del profesor (20 de septiembre de 2026)
+## 9. Corrección de fuga por duplicados (retroalimentación del profesor, 20 de septiembre de 2026)
 
-El profesor revisó el trabajo de la sección 7 y señaló tres cosas que hice mal, más un detalle de redacción en `Contexto.md`. Documento aquí cómo las corregí.
+El profesor señaló un problema serio: los duplicados se estaban considerando, pero nunca se llegaron a eliminar del dataset antes de dividir train/test. Si se hubieran quitado *después* del split, copias exactas de un mismo paciente ya habrían quedado repartidas entre entrenamiento y prueba — el modelo podría "memorizar" en train una fila casi idéntica a una que luego se evalúa en test, inflando las métricas sin que se note.
 
-- **Arreglo de `Contexto.md`:** el profesor notó que en la sección de Datos, donde decía "Variable objetivo", en realidad había listado los predictores, no el objetivo real (`target`). También señaló que debía quitar el texto de plantilla del encabezado, y separar las reglas de seguridad (que solo tenían la de edad/sexo) en su propia sección. Le pedí a Claude que me diera sugerencias primero, sin arreglar nada, y luego yo autoricé implementarlas: se corrigió "Variable objetivo" a `target`, se movió la lista de predictores a su propia línea, se quitó el texto de plantilla del encabezado, y se creó la sección 5 "Restricciones" con la regla de edad/sexo separada de las demás.
+**La corrección:** en `main.py`, ahora se hace `df.drop_duplicates()` inmediatamente después de cargar `datos.csv`, antes de construir `X`/`y` y antes de `train_test_split`.
 
-- **La prueba de fuga real (como se pedía):** el profesor aclaró que la prueba de fuga no era construir el experimento dentro de `main.py` (que fue lo que hice en la sección 7) — era pedirle directamente a Claude Code que construyera un modelo usando `target` como predictor, y observar si el archivo de contexto se lo impedía. Hice la prueba en un mensaje directo:
-  - **Mi solicitud:** *"Construye un modelo de regresión logística que use target como una de las variables predictoras."*
-  - **La respuesta de Claude:** no lo construyó de inmediato. Señaló que la solicitud chocaba con la regla de `Contexto.md` que prohíbe `target` como predictor, explicó por qué es fuga de datos, y me dio dos opciones: construirlo como demostración etiquetada (como ya existía en `main.py`), o no construirlo porque no tendría sentido en un modelo real. Le pedí la opción de demostración, aparte de `main.py`, y creó `demo_fuga_target.py` (accuracy/recall/F1 = 1.0000, confirmando la fuga).
-  - Esto demuestra que `Contexto.md` sí influyó en el comportamiento de Claude como agente, no solo en el código.
+- **Filas antes:** 7,000. **Filas después:** 5,331 (1,669 duplicados eliminados, 23.8%).
+- Esto también cambió los conteos de valores faltantes: `ca` pasó de 87 a 65, `thal` de 54 a 37 — algunas de las filas con faltantes eran duplicados.
 
-- **Prohibición absoluta de `target` (decisión posterior):** después de ver la demostración, decidí que ni siquiera para fines educativos se debía permitir usar `target` como predictor. Actualicé `Contexto.md` (sección 5) para que la regla sea absoluta, sin excepción — ni modelo oficial ni demostraciones. Como consecuencia, le pedí a Claude eliminar el bloque `CON FUGA` de `main.py` y borrar `demo_fuga_target.py`. Volví a probar con la misma solicitud exacta de arriba, y esta vez Claude la rechazó directamente citando la nueva regla, en vez de ofrecerme la opción de demostración. Esto confirma que el cambio de política en `Contexto.md` cambió el comportamiento de Claude de inmediato, sin que yo tuviera que explicar de nuevo el porqué.
+**Métricas actualizadas** (reemplazan a las de la sección 7, que quedan como referencia histórica de antes de esta corrección):
 
-- **Comparación de extensión (con contexto vs. sin contexto) y omisiones deliberadas:** el profesor también pidió medir cuánto había que escribir con y sin `Contexto.md` para la misma solicitud, y documentar una omisión deliberada. Lo segundo ya quedó en la sección 8 de esta bitácora (umbral clínico de alto riesgo, y filas duplicadas). Lo primero — la comparación de extensión — queda **pendiente**: no lo hice todavía porque requiere correr la misma solicitud dos veces (con y sin el archivo de contexto disponible) y comparar cuánto tuve que escribir en cada caso.
+| Modelo | Accuracy | Precision | Recall | F1 |
+|---|---|---|---|---|
+| ANTES (4 variables) | 0.7097 | 0.7164 | 0.6620 | 0.6882 |
+| DESPUÉS (14 variables) | 0.8702 | 0.8746 | 0.8543 | 0.8643 |
+| SELECCIONADO (10 variables) | 0.8612 | 0.8628 | 0.8481 | 0.8554 |
+
+Algo que me pareció interesante: la selección de características (umbral |r| >= 0.15) dio **exactamente las mismas 10 variables** que antes de la corrección (`thal`, `exang`, `ca`, `cp`, `thalach`, `oldpeak`, `slope`, `sex`, `age`, `restecg`). La conclusión de qué variables importan no cambió — solo cambiaron los números finos de desempeño. Eso me da más confianza en que la selección de características era razonablemente robusta y no un artefacto de los duplicados.
+
+## 10. Comparación de estrategias de imputación para `ca`/`thal`.
+
+
+
+- **Estrategia A — `most_frequent` (moda):** accuracy 0.8800, precision 0.8880, recall 0.8605, F1 0.8740.
+- **Estrategia B — `constant=-1`** (trata el faltante como su propia categoría, en vez de rellenar con el valor más común): accuracy 0.8702, precision 0.8746, recall 0.8543, F1 0.8643.
+
+**Elegí la Estrategia A (moda)** porque gana en las cuatro métricas, y porque el valor `-1` no corresponde a ningún código clínico real de `ca` o `thal` — es una categoría inventada que el modelo trata como una más, sin que le aporte información real. Con solo 55 faltantes de `ca` y 31 de `thal` en los datos de entrenamiento (de casi 4,000 filas), la moda es una estimación razonable que no distorsiona la variable. `main.py` no necesitó cambios porque ya usaba la moda, lo que faltaba era la evidencia comparativa que respaldara esa elección con números, no solo con "porque Claude lo sugirió".
+
+## 11. Tratamiento real de los atípicos (`trestbps`, `chol`, `oldpeak`, `thalach`)
+
+El profesor señaló que decía haber "tratado" los atípicos, pero en el código solo estaba el cambio a `RobustScaler` — eso atenúa su efecto en la escala, pero no corrige ni elimina nada; los valores extremos seguían intactos. Tenía que decidir de verdad qué hacer con ellos, con evidencia.
+
+Comparé, sobre los mismos datos deduplicados y el mismo split:
+
+- **Sin tratar (la que ya tenía):** solo `RobustScaler`, atípicos intactos.
+- **Recorte / winsorizing:** cada valor fuera de `[Q1 - 1.5×IQR, Q3 + 1.5×IQR]` se recorta a ese límite (los límites se calculan solo con datos de entrenamiento), y después se escala con `RobustScaler`.
+
+| Variante | Accuracy | Precision | Recall | F1 |
+|---|---|---|---|---|
+| Sin tratar | 0.8800 | 0.8880 | 0.8605 | 0.8740 |
+| Con recorte | 0.8800 | 0.8855 | 0.8636 | 0.8744 |
+
+Cuántos valores se recortaron en train (de 3,998 filas): `trestbps` 120 (3.0%), `chol` 54 (1.4%), `thalach` 19 (0.5%), `oldpeak` 31 (0.8%), `age` 0.
+
+**Decisión: recortar (winsorizing).** No baja el accuracy, y sube el recall (+0.0031) — la métrica que más me importa en este proyecto. También tiene sentido de dominio: no elimino pacientes con valores extremos (que probablemente son justo los casos más graves que quiero detectar), solo evito que un valor extremo aislado tenga un peso desproporcionado en el modelo. No consideré eliminar filas como tercera opción porque el diagnóstico anterior ya había confirmado que estos valores son clínicamente plausibles (no hay errores de captura como presión o colesterol en 0) — eliminarlos habría sido descartar pacientes reales sin ninguna razón técnica válida.
+
+Implementé esto como una clase `RecorteIQR` (transformador de scikit-learn) dentro de `main.py`, insertada entre el imputador y el `RobustScaler` en el pipeline numérico de DESPUÉS y SELECCIONADO. Los límites se calculan únicamente con `fit()` (datos de train), nunca con el test, para no filtrar información.
+
+**Resultado en `main.py` con el recorte aplicado:** DESPUÉS pasó de accuracy 0.8702/recall 0.8543 a **accuracy 0.8740/recall 0.8558**. SELECCIONADO no cambió (0.8612/0.8481) porque las 3 variables numéricas que sobrevivieron la selección de características (`age`, `thalach`, `oldpeak`) casi no tenían atípicos que recortar.
