@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "disaster-classifier",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["disaster-classifier/app.py"],
+      "port": 5000
+    }
+  ]
+}

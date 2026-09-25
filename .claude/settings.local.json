@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/whate/Downloads/ia_educativa_cnn//**)",
+      "Read(//c/Users/whate/Downloads/ia_educativa_cnn/static//**)",
+      "Read(//c/Users/whate/Downloads/ia_educativa_cnn/models//**)",
+      "Read(//c/Users/whate/Downloads/ia_educativa_cnn/training//**)",
+      "Read(//c/Users/whate/Downloads/ia_educativa_cnn/utils//**)",
+      "Bash(python -c \"from PIL import Image; print\\('PIL OK'\\)\")",
+      "Bash(python generar_muestras.py)",
+      "Bash(pip install:*)",
+      "Bash(python -c ':*)",
+      "Bash(python -c ' *)",
+      "PowerShell(Invoke-RestMethod http://localhost:8000/ -ErrorAction SilentlyContinue)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(gh auth *)",
+      "Bash(gh --version)",
+      "PowerShell(gh --version 2>&1)",
+      "Bash(where winget *)",
+      "Bash(where git *)",
+      "PowerShell(winget install --id GitHub.cli -e --accept-source-agreements --accept-package-agreements)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\GitHub CLI;\" + $env:PATH; gh --version)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\GitHub CLI;\" + $env:PATH; gh auth login --hostname github.com --git-protocol https --web)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\GitHub CLI;\" + $env:PATH; gh auth status)",
+      "Bash(mkdir -p \"C:/Users/whate/Documents/Apps/copilot-docente-aguadeno\" && cp \"C:/Users/whate/Downloads/copilot_docente_aguadeno_3.html\" \"C:/Users/whate/Documents/Apps/copilot-docente-aguadeno/index.html\" && ls \"C:/Users/whate/Documents/Apps/copilot-docente-aguadeno\")",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\GitHub CLI;\" + $env:PATH; cd \"C:\\\\Users\\\\whate\\\\Documents\\\\Apps\\\\copilot-docente-aguadeno\"; gh repo create copilot-docente-aguadeno --public --source=. --remote=origin --push)",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\GitHub CLI;\" + $env:PATH; gh api -X POST repos/josuedcpy-boop/copilot-docente-aguadeno/pages -f \"source[branch]=main\" -f \"source[path]=/\")",
+      "PowerShell($env:PATH = \"C:\\\\Program Files\\\\GitHub CLI;\" + $env:PATH; gh api repos/josuedcpy-boop/copilot-docente-aguadeno/pages)",
+      "Bash(python -c \"import torch; print\\('cuda available:', torch.cuda.is_available\\(\\)\\); print\\(torch.__version__\\)\")",
+      "Bash(pip list *)",
+      "Bash(python prepare_data.py)",
+      "Bash(pip show *)",
+      "Bash(python -)",
+      "Bash(python infer.py \"C:\\\\Users\\\\whate\\\\Downloads\\\\archive \\(1\\)\\\\earthquake\\\\earthquake\\\\earthquake1.jpg\" \"C:\\\\Users\\\\whate\\\\Downloads\\\\archive \\(1\\)\\\\disaster_dataset\\\\disaster_dataset\\\\smoke\\\\smoke1.jpg\")",
+      "Bash(mkdir -p \"/c/Users/whate/Documents/Apps/.claude\")",
+      "Bash(curl -s -X POST -F \"image=@C:\\\\Users\\\\whate\\\\Downloads\\\\archive \\(1\\)\\\\earthquake\\\\earthquake\\\\earthquake5.jpg\" http://127.0.0.1:5000/predict)",
+      "Bash(curl -s -X POST -F \"image=@C:\\\\Users\\\\whate\\\\Documents\\\\Apps\\\\disaster-classifier\\\\prepare_data.py\" http://127.0.0.1:5000/predict)"
+    ]
+  }
+}

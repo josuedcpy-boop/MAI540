@@ -1,6 +1,6 @@
 # README técnico — pipeline de `main.py`
 
-> Escrito por mí (no es el enunciado del profesor — ese sigue en `README.md`). Explica el orden real de las transformaciones que hace `main.py` y por qué ese orden específico evita fuga de datos en cada paso. La evidencia numérica de cada decisión está en `BITACORA.md`; las reglas de contexto/restricciones están en `Contexto.md`.
+Explica el orden real de las transformaciones que hace `main.py` y por qué ese orden específico evita fuga de datos en cada paso. La evidencia numérica de cada decisión está en `BITACORA.md`; las reglas de contexto/restricciones están en `Contexto.md`.
 
 ## Resumen del problema
 Clasificación binaria: predecir `target` (1 = enfermedad cardíaca) a partir de variables clínicas de `data/datos.csv`. El pipeline entrena y compara tres modelos (ANTES, DESPUÉS, SELECCIONADO) sobre exactamente el mismo split de datos.
@@ -67,4 +67,4 @@ El imputador va antes del recorte y del escalador porque `RecorteIQR` y `RobustS
 ## Referencias
 - Evidencia numérica de cada decisión (comparaciones de imputación, atípicos, selección de características): `BITACORA.md`.
 - Reglas de negocio, restricciones de seguridad/privacidad y decisiones vigentes: `Contexto.md`.
-- Enunciado original de la tarea: `README.md`.
+- Enunciado original: `README.md`.

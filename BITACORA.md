@@ -84,11 +84,10 @@ En ese momento, `main.py` terminó con **cuatro modelos** en un solo reporte: AN
 
 ## 8. Pendientes / ideas futuras 
 - **Umbral clínico de "alto riesgo":** no definí un umbral como "si probabilidad > 0.7, es alto riesgo". Costo de incluirlo: requeriría criterio médico que ni yo ni Claude tenemos, y le daría al modelo una falsa autoridad diagnóstica — justo lo que la sección 1 de `Contexto.md` ya prohíbe explícitamente ("no puede decir definitivo que la tiene").
-- ~~**Qué hacer con las 1,669 filas duplicadas:** no especifiqué una regla para arreglarlas...~~ **Revertido (2026-09-20):** el profesor pidió corregir esto explícitamente. Ver sección 9.
 
 ## 9. Corrección de fuga por duplicados (retroalimentación del profesor, 20 de septiembre de 2026)
 
-El profesor señaló un problema serio: los duplicados se estaban considerando, pero nunca se llegaron a eliminar del dataset antes de dividir train/test. Si se hubieran quitado *después* del split, copias exactas de un mismo paciente ya habrían quedado repartidas entre entrenamiento y prueba — el modelo podría "memorizar" en train una fila casi idéntica a una que luego se evalúa en test, inflando las métricas sin que se note.
+Los duplicados se estaban considerando, pero nunca se llegaron a eliminar del dataset antes de dividir train/test. Si se hubieran quitado *después* del split, copias exactas de un mismo paciente ya habrían quedado repartidas entre entrenamiento y prueba — el modelo podría "memorizar" en train una fila casi idéntica a una que luego se evalúa en test, inflando las métricas sin que se note.
 
 **La corrección:** en `main.py`, ahora se hace `df.drop_duplicates()` inmediatamente después de cargar `datos.csv`, antes de construir `X`/`y` y antes de `train_test_split`.
 
