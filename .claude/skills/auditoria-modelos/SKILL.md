@@ -1,6 +1,7 @@
 ---
 name: auditoria-modelos
 description: Usar para auditar un notebook (.ipynb) de clasificación o regresión antes de aceptar sus resultados o métricas. Aplica siempre que el usuario pida "revisar", "auditar" o "validar" un notebook de machine learning, pregunte si un modelo tiene fuga de datos (data leakage), pida verificar el orden de train_test_split o de un scaler/encoder, o quiera saber si el desempeño del modelo es distinto entre subgrupos (fairness/disparidad). Úsalo también si el usuario simplemente pega un notebook y pregunta "¿estas métricas son confiables?" o "¿este pipeline está bien hecho?", incluso si no menciona la palabra "auditoría".
+version: 1.1.0
 ---
 
 # Auditoría de modelos
@@ -10,9 +11,10 @@ description: Usar para auditar un notebook (.ipynb) de clasificación o regresi�
 Antes de confiar en las métricas de un notebook de ML, hay que verificar que:
 - no hay fuga de datos (data leakage) entre train y test,
 - ninguna columna usada para predecir contiene información que solo existiría después del evento que se quiere predecir,
-- el desempeño del modelo no oculta una disparidad importante entre subgrupos.
+- el desempeño del modelo no oculta una disparidad importante entre subgrupos,
+- si se eligió algún hiperparámetro probando varios valores, esa elección no infla el desempeño final reportado.
 
-Estos tres problemas son silenciosos: el notebook corre sin errores y produce un número de accuracy/AUC que parece razonable, pero el número puede estar inflado o esconder un sesgo. La auditoría existe para separar "el notebook corrió" de "el resultado es confiable".
+Estos cuatro problemas son silenciosos: el notebook corre sin errores y produce un número de accuracy/AUC que parece razonable, pero el número puede estar inflado o esconder un sesgo. La auditoría existe para separar "el notebook corrió" de "el resultado es confiable".
 
 No corrijas el notebook ni re-entrenes el modelo. Tu trabajo es leer, verificar con evidencia y reportar — no arreglar el código a menos que el usuario lo pida explícitamente.
 
@@ -28,13 +30,13 @@ Si falta la ruta del notebook, pídela antes de continuar — no hay nada que au
 
 ## Cómo leer el notebook
 
-Usa la herramienta de notebooks para leer las celdas de código **en el orden en que aparecen en el archivo**, no en el orden de ejecución (`execution_count`) si difieren — lo que importa para reproducibilidad es lo que corre alguien que ejecuta el notebook de arriba hacia abajo. Si el orden de ejecución y el orden de las celdas no coinciden, anótalo: es evidencia de que el notebook se editó después de correr y los resultados mostrados pueden no corresponder al código actual.
+Lee las celdas de código (el notebook es un archivo `.ipynb`) **en el orden en que aparecen en el archivo**, no en el orden de ejecución (`execution_count`) si difieren — lo que importa para reproducibilidad es lo que corre alguien que ejecuta el notebook de arriba hacia abajo. Si `execution_count` es `null` (o no está presente) en las celdas, no importa — sigue el orden del archivo igual. Si el orden de ejecución y el orden de las celdas no coinciden, anótalo: es evidencia de que el notebook se editó después de correr y los resultados mostrados pueden no corresponder al código actual.
 
 Lee todas las celdas de código antes de emitir cualquier veredicto. Un check que parece fallar en la celda 5 puede resolverse en la celda 8 (por ejemplo, un split que ocurre antes de lo esperado pero que en realidad es un split exploratorio descartado después).
 
 ## Pasos de verificación
 
-Ejecuta estos cuatro checks en orden. Para cada uno, busca evidencia concreta (número de celda y línea o fragmento de código) antes de decidir un veredicto — nunca infieras un PASA por ausencia de evidencia en contra.
+Ejecuta estos cinco checks en orden. Para cada uno, busca evidencia concreta (número de celda y línea o fragmento de código) antes de decidir un veredicto — nunca infieras un PASA por ausencia de evidencia en contra.
 
 ### 1. Orden de `train_test_split` vs. `fit()` de escaladores/encoders
 
@@ -69,13 +71,25 @@ Ejecuta estos cuatro checks en orden. Para cada uno, busca evidencia concreta (n
 
 **Cómo verificar:**
 - Si el usuario indicó una columna de subgrupo, confirma que existe en el DataFrame usado para test.
-- Si el notebook **no** calcula métricas por subgrupo, calcúlalas tú: para cada valor único de la columna de subgrupo, filtra `y_test`/`y_pred` por ese subgrupo y calcula la(s) misma(s) métrica(s) que el notebook reporta globalmente (usa el mismo modelo y las mismas predicciones ya generadas en el notebook, no reentrenes).
-- Señala como hallazgo cualquier subgrupo cuya métrica se desvíe notablemente del promedio global (usa criterio: reporta la diferencia numérica y deja que el lector juzgue si es aceptable, no impongas un umbral arbitrario salvo que el usuario dé uno).
-- Si la columna de subgrupo no existe y el usuario no la mencionó como esperada, marca este check como NO SE PUEDE DETERMINAR con esa razón explícita — no lo omitas en silencio.
+- Si el notebook evalúa con un split fijo (`train_test_split`) y **no** calcula métricas por subgrupo, calcúlalas tú: para cada valor único de la columna de subgrupo, filtra `y_test`/`y_pred` por ese subgrupo y calcula la(s) misma(s) métrica(s) que el notebook reporta globalmente (usa el mismo modelo y las mismas predicciones ya generadas en el notebook, no reentrenes).
+- Si el notebook evalúa solo con validación cruzada (no hay un `y_test`/`y_pred` fijo guardado en ninguna variable, como en `cross_val_score`), usa `cross_val_predict` con el **mismo modelo y el mismo objeto `cv`** que ya usa el notebook para obtener predicciones out-of-fold de cada muestra, y calcula las métricas por subgrupo sobre esas predicciones — no es reentrenar con otra configuración, es obtener las predicciones que el notebook nunca guardó explícitamente.
+- Reporta la métrica de cada subgrupo y su diferencia numérica contra el promedio global — no impongas un umbral arbitrario salvo que el usuario dé uno.
+- **Veredicto:** si mides una disparidad notable entre subgrupos (una diferencia que un lector razonable consideraría relevante para decidir si el modelo es aceptable, no una fluctuación menor de un par de muestras), el veredicto es **FALLA**, con la tabla de métricas por subgrupo como evidencia. Si mides y no hay disparidad notable, el veredicto es **PASA**, con la misma tabla como evidencia. Si la columna de subgrupo no existe y el usuario no la mencionó como esperada, o si no se pueden obtener predicciones por muestra (ni con split fijo ni con `cross_val_predict`), marca este check como NO SE PUEDE DETERMINAR con esa razón explícita — no lo omitas en silencio.
+
+### 5. Selección de hiperparámetros y validación anidada
+
+**Por qué importa:** si un hiperparámetro (p. ej. `k` en KNN, `max_depth` en un árbol, `C` en regresión logística) se elige probando varios valores y evaluando cada uno con las mismas particiones de validación cruzada, y luego se reporta ese mismo resultado como el "desempeño final" de ese modelo, el número queda optimista: las particiones que decidieron el hiperparámetro ganador son las mismas que miden su desempeño, así que no representan datos verdaderamente ajenos al proceso de selección. Es la misma idea del check 1 (no reutilizar datos de evaluación para tomar decisiones) aplicada a la elección de hiperparámetros en vez de al ajuste de un transformador.
+
+**Cómo verificar:**
+- Busca cualquier bucle manual o `GridSearchCV`/`RandomizedSearchCV` que pruebe varios valores de un hiperparámetro, cada uno evaluado con `cross_val_score`/`cross_val_predict`/un split.
+- Si el notebook no hace ninguna búsqueda de hiperparámetros (todos los modelos usan valores fijos, elegidos de antemano), este check no aplica — márcalo como NO SE PUEDE DETERMINAR con la razón "no hay búsqueda de hiperparámetros en el notebook".
+- Si sí hay búsqueda: verifica si el `cv`/`random_state`/partición usado para elegir el hiperparámetro es el mismo que luego se usa para reportar el desempeño de ese modelo en la comparación final con los demás.
+- Si es el mismo, repórtalo como hallazgo: el número tiene una ventaja optimista frente a modelos que no pasaron por ningún proceso de selección. Esto no invalida necesariamente el resultado, pero debe quedar declarado explícitamente, no en silencio.
+- La forma correcta de evitarlo es validación cruzada anidada (un bucle externo que evalúa, uno interno que elige el hiperparámetro dentro de cada partición externa) o, como mínimo, un conjunto de validación separado del conjunto de prueba final.
 
 ## Criterios de veredicto
 
-Para cada uno de los 4 checks, emite exactamente uno de estos veredictos:
+Para cada uno de los 5 checks, emite exactamente uno de estos veredictos:
 
 - **PASA** — verificaste explícitamente que el check se cumple, con evidencia (celda + línea o fragmento).
 - **FALLA** — encontraste evidencia concreta de que el problema existe.
@@ -85,7 +99,9 @@ Nunca asumas PASA por defecto ni por ausencia de evidencia en contra: la ausenci
 
 ## Salida: `AUDIT_REPORT.md`
 
-Genera un archivo `AUDIT_REPORT.md` en el mismo directorio que el notebook auditado (o donde indique el usuario), con esta estructura:
+Genera un archivo `AUDIT_REPORT.md` en el mismo directorio que el notebook auditado (o donde indique el usuario). Si ya existe un `AUDIT_REPORT.md` en ese directorio (de una auditoría anterior), no lo sobrescribas: nombra el nuevo archivo agregando la fecha de esta auditoría entre paréntesis, por ejemplo `AUDIT_REPORT (2026-09-27).md`, para conservar el historial de auditorías previas.
+
+Estructura del reporte:
 
 ```markdown
 # Auditoría de modelo — [nombre del notebook]
@@ -107,6 +123,7 @@ Genera un archivo `AUDIT_REPORT.md` en el mismo directorio que el notebook audit
 | 2 | Fuga del objetivo en columnas predictoras | ... | ... |
 | 3 | Métricas reportadas correctamente | ... | ... |
 | 4 | Disparidad entre subgrupos | ... | Tabla de métricas por subgrupo si aplica |
+| 5 | Selección de hiperparámetros y validación anidada | ... | ... |
 
 ## Hallazgos detallados
 
