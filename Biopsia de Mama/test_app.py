@@ -83,3 +83,56 @@ def test_predecir_caso_devuelve_benigno_o_maligno(ns):
         resultado = ns["predecir_caso"](_ModeloFalso(valor_crudo), caso)
         assert resultado in ("benigno", "maligno"), f"Valor inesperado: {resultado!r}"
         assert resultado == esperado
+
+
+# Qué verifica cada prueba, para mostrarlo junto al resultado al correr este
+# archivo directamente (con pytest -v solo se ve el nombre de la función).
+_QUE_VERIFICA = {
+    "test_construir_caracteristicas_sin_infinitos_ni_nulos": (
+        "construir_caracteristicas() no debe generar valores infinitos ni nulos "
+        "en 'variabilidad_por_biopsia' con los datos reales."
+    ),
+    "test_columna_con_fuga_no_esta_en_predictoras": (
+        "sesiones_tratamiento_programadas es fuga de datos (se deriva del "
+        "diagnóstico) y no debe estar en COLUMNAS_PREDICTORAS."
+    ),
+    "test_predecir_caso_devuelve_benigno_o_maligno": (
+        "predecir_caso() debe traducir 0/1 a exactamente 'maligno'/'benigno', "
+        "sin importar qué prediga el modelo."
+    ),
+}
+
+_PRUEBAS = [
+    test_construir_caracteristicas_sin_infinitos_ni_nulos,
+    test_columna_con_fuga_no_esta_en_predictoras,
+    test_predecir_caso_devuelve_benigno_o_maligno,
+]
+
+
+def _ejecutar_con_resumen():
+    """Corre cada prueba manualmente e imprime, junto al resultado, qué
+    verifica y (si falla) por qué falló -- pytest -v solo muestra PASSED/FAILED
+    sin decir qué significa eso."""
+    namespace = _cargar_namespace()
+    fallos = 0
+    for prueba in _PRUEBAS:
+        que_verifica = _QUE_VERIFICA[prueba.__name__]
+        try:
+            prueba(namespace)
+        except AssertionError as error:
+            fallos += 1
+            print(f"FALLA  {prueba.__name__}")
+            print(f"       Verifica: {que_verifica}")
+            print(f"       Motivo del fallo: {error}\n")
+        else:
+            print(f"PASA   {prueba.__name__}")
+            print(f"       Verifica: {que_verifica}\n")
+    total = len(_PRUEBAS)
+    print(f"Resumen: {total - fallos}/{total} pruebas pasaron.")
+    return fallos
+
+
+if __name__ == "__main__":
+    # Permite correr "python test_app.py" y ver, junto a cada resultado, un
+    # resumen breve de qué se está verificando y por qué pasó o falló.
+    raise SystemExit(1 if _ejecutar_con_resumen() else 0)
