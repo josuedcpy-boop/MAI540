@@ -1,0 +1,6 @@
+mcp[cli]>=2.0
+anthropic>=1.0
+scikit-learn>=1.4
+pandas>=2.0
+python-dotenv>=1.0
+matplotlib>=3.8
